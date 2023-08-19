@@ -1,66 +1,145 @@
-version: '3.8'
-
+version: '3.3'
 services:
+  app:
+    image: blockscout/blockscout:5.2.2.commit.4df2be6c
+    command:
+      - sh
+      - -c
+      - bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" &&
+        bin/blockscout start
+    environment:
+      ACCOUNT_POOL_SIZE: '20'
+      ACCOUNT_REDIS_URL: redis://redis-db:6379
+      API_V2_ENABLED: 'true'
+      BLOCKSCOUT_VERSION: v5.2.2-beta
+      CHAIN_ID: '2034'
+      COIN: WETH
+      COIN_NAME: WETH
+      DATABASE_URL: postgres://postgres:postgres@postgres-db:5432/blockscout
+      ECTO_USE_SSL: 'false'
+      ETHEREUM_JSONRPC_HTTP_URL: https://rpc.nice.hydration.cloud
+      ETHEREUM_JSONRPC_TRACE_URL: https://rpc.nice.hydration.cloud
+      INDEXER_COIN_BALANCES_BATCH_SIZE: '10'
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: 'true'
+      INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: 'true'
+      INDEXER_RECEIPTS_BATCH_SIZE: '10'
+      INDEXER_TOKEN_BALANCES_BATCH_SIZE: '10'
+      JSON_RPC: https://rpc.nice.hydration.cloud
+      LOGO: /images/hydra-logo.svg
+      NETWORK: HydraDX
+      PORT: '4000'
+      RELEASE_LINK: https://github.com/blockscout/blockscout/releases/tag/v5.2.2-beta
+      SECRET_KEY_BASE: b7ICxPjuotgM3Na3Dkw2DE+i46KZlG5HS9cBwywYX8XuCS5dGLkiQYWNN6Plgf88
+      SUBNETWORK: Testnet
+      SUPPORTED_CHAINS: '[]'
+    volumes:
+      - logs:/app/logs/
+    networks:
+      - default
+      - gateway
+    configs:
+      -
+        source: logo
+        target: /app/lib/block_scout_web-5.2.2/priv/static/images/hydra-logo.svg
+    logging:
+      driver: json-file
+    deploy:
+      labels:
+        traefik.http.routers.blockscout.rule: Host(`blockscout.nice.hydration.cloud`)
+        traefik.http.routers.blockscout.tls: 'true'
+        traefik.http.routers.blockscout.tls.certresolver: myresolver
+        traefik.http.services.blockscout.loadbalancer.server.port: '4000'
+  frontend:
+    image: ghcr.io/blockscout/frontend:latest
+    environment:
+      NEXT_PUBLIC_API_BASE_PATH: /
+      NEXT_PUBLIC_API_HOST: blockscout.nice.hydration.cloud
+      NEXT_PUBLIC_API_PROTOCOL: https
+      NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: '''wss'''
+      NEXT_PUBLIC_APP_HOST: blockscout.nice.hydration.cloud
+      NEXT_PUBLIC_APP_PROTOCOL: https
+      NEXT_PUBLIC_FEATURED_NETWORKS: https://raw.githubusercontent.com/blockscout/frontend-configs/main/configs/featured-networks/eth-goerli.json
+      NEXT_PUBLIC_HOMEPAGE_CHARTS: '"[''daily_txs'']"'
+      NEXT_PUBLIC_HOMEPAGE_PLATE_TEXT_COLOR: '"rgb(255, 255, 255)"'
+      NEXT_PUBLIC_IS_TESTNET: '''true'''
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: '18'
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: WETH
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: WETH
+      NEXT_PUBLIC_NETWORK_ICON: https://raw.githubusercontent.com/blockscout/frontend-configs/main/configs/network-icons/goerli.svg
+      NEXT_PUBLIC_NETWORK_ID: '2034'
+      NEXT_PUBLIC_NETWORK_LOGO: https://raw.githubusercontent.com/blockscout/frontend-configs/main/configs/network-logos/goerli.svg
+      NEXT_PUBLIC_NETWORK_NAME: HydraDX
+      NEXT_PUBLIC_NETWORK_SHORT_NAME: HydraDX
+      NEXT_PUBLIC_STATS_API_HOST: http://localhost:8080
+      NEXT_PUBLIC_VISUALIZE_API_HOST: http://localhost:8081
+    networks:
+      - default
+      - gateway
+    logging:
+      driver: json-file
+    deploy:
+      replicas: 0
+      labels:
+        traefik.http.routers.explorer.rule: Host(`explorer.nice.hydration.cloud`)
+        traefik.http.routers.explorer.tls: 'true'
+        traefik.http.routers.explorer.tls.certresolver: myresolver
+        traefik.http.services.explorer.loadbalancer.server.port: '3000'
+  postgres-db:
+    image: postgres:14
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+    environment:
+      POSTGRES_DB: blockscout
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    volumes:
+      - db:/var/lib/postgresql/data/
+    networks:
+      - default
+    logging:
+      driver: json-file
   redis-db:
-    image: 'redis:alpine'
-#    ports:
-#      - 6379:6379
-    command: redis-server
+    image: redis:alpine
+    command:
+      - redis-server
     volumes:
       - redis-data:/data
-
-  db:
-    image: postgres:14
-    command: postgres -c 'max_connections=200'
-    environment:
-      POSTGRES_PASSWORD: ''
-      POSTGRES_USER: 'postgres'
-      POSTGRES_HOST_AUTH_METHOD: 'trust'
-    volumes:
-      - db-data:/var/lib/postgresql/data/
-
-  blockscout:
-    image: blockscout/blockscout:master
-    command: sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
-    environment:
-      - DATABASE_URL=postgresql://postgres:@db:5432/blockscout
-      - ETHEREUM_JSONRPC_HTTP_URL=https://rpc.nice.hydration.cloud
-      - SUBNETWORK=HydraDX
-      - COIN=WETH
-      - COIN_NAME=WETH
-      - CHAIN_ID=2034
-#      - LOGO=/images/acala_logo.svg
-#      - FOOTER_LOGO=/images/acala_logo.svg
-      - JSON_RPC=https://rpc.nice.hydration.cloud
-      - SECRET_KEY_BASE=b7ICxPjuotgM3Na3Dkw2DE+i46KZlG5HS9cBwywYX8XuCS5dGLkiQYWNN6Plgf88
-      - SUPPORTED_CHAINS=[]
-      - INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER=true
-      - INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER=true
-      - ACCOUNT_POOL_SIZE=20
-      - ACCOUNT_REDIS_URL=redis://redis-db:6379
-      - INDEXER_TOKEN_BALANCES_BATCH_SIZE=10
-      - INDEXER_COIN_BALANCES_BATCH_SIZE=10
-      - INDEXER_RECEIPTS_BATCH_SIZE=10
-      - BLOCKSCOUT_VERSION=v5.2.2-beta
-      - RELEASE_LINK=https://github.com/blockscout/blockscout/releases/tag/v5.2.2-beta
-    ports:
-      - 4000:4000
-    volumes:
-      - logs/:/app/logs/
-
-  smart-contract-verifier:
-    image: ghcr.io/blockscout/smart-contract-verifier:latest
-
-  visualizer:
-    image: ghcr.io/blockscout/visualizer:latest
-
+    networks:
+      - default
+    logging:
+      driver: json-file
   sig-provider:
     image: ghcr.io/blockscout/sig-provider:latest
-
+    networks:
+      - default
+    logging:
+      driver: json-file
+  smart-contract-verifier:
+    image: ghcr.io/blockscout/smart-contract-verifier:latest
+    networks:
+      - default
+    logging:
+      driver: json-file
+  visualizer:
+    image: ghcr.io/blockscout/visualizer:latest
+    networks:
+      - default
+    logging:
+      driver: json-file
+networks:
+  default:
+    driver: overlay
+  gateway:
+    external: true
 volumes:
-  redis-data:
+  db:
     driver: local
   logs:
     driver: local
-  db-data:
+  redis-data:
     driver: local
+configs:
+  logo:
+    external: true
